@@ -1,0 +1,13 @@
+# 本地文件，不进仓库
+runs/
+sandbox/
+项目背景说明.md
+DSH-定位地图.md
+probe-proxy.mjs
+probe-proxy-official.mjs
+exp-oai-route.patch.yml
+metrics.patch.yml
+qab2-base.patch.yml
+qab2-guardian.patch.yml
+plugins/multi-turn-driver.ts
+文件清单.md

@@ -1,0 +1,21 @@
+# Token guardian suite — one plugin, all mechanisms. Install with:
+#   dsh --profile <profile> --patch F:/DSH思考问题/suite.patch.yml
+# Defaults are pure-savings + soft-nudges: nothing below can cut a turn short.
+# Uncomment config keys to tune; set a section's `enabled: false` to turn it off.
+- insert:
+    - id: yuqi-token-guardian
+      name: './plugins/token-guardian.js'
+      config: {}
+      # config:
+      #   sweep: { enabled: true, keepLatest: 0, minChars: 2000, distill: false }
+      #   #   sweep.distill: opt-in — each sweep then costs one cheap low-effort
+      #   #   call, but the summary becomes a real state note instead of a template.
+      #   dedupe: { enabled: true, tools: [read], minChars: 2000 }
+      #   prune: { enabled: true }
+      #   loops: { enabled: true, sameToolStreak: 6, noProgressSteps: 8, reasoningRepeat: 2, turnReasoningChars: 300000, turnMinutes: 10 }
+      #   batch: { enabled: true, streak: 2 }
+      #   shape: { enabled: true }                    # no re-deriving settled work, once per turn
+      #   effort: { routineLevel: 'low', respectExplicit: true, pressureCut: 0.7 }
+      #   #   routineLevel 'off' saves more but removes routine-step judgment entirely.
+      #   # opt-in hard ceilings — CAN cut a turn; off by default:
+      #   caps: { planningMaxTokens: 0, mechanicalMaxTokens: 0, maxTruncations: 2 }
