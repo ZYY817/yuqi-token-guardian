@@ -2,7 +2,7 @@
 
 # Token Guardian
 
-**On the official DeepSeek API, one task re-sent 1.65M characters of reasoning the model had already produced — every request paying for old thinking again. This plugin cuts that to 23K.**
+**On the official DeepSeek API, a single task replayed 1.65M characters of reasoning the model had already produced — every request billed for old thinking again. Token Guardian cuts that to 23K.**
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![tested on](https://img.shields.io/badge/dsh-0.1.5--rc.2-green.svg)]()
@@ -12,15 +12,15 @@ English · [中文](README.zh.md)
 
 </div>
 
-In DeepSeek thinking mode, every agent step re-sends all previous reasoning verbatim — and bills for it again. Token Guardian replaces spent reasoning with a summary: conclusions stay, re-transmission stops. No changes to official code; measured on the official API, task quality unchanged.
+In DeepSeek's thinking mode, every agent step re-sends the complete reasoning history and pays for it again. Token Guardian compacts finished reasoning into bounded summaries before it is replayed: conclusions, tool calls, and result previews are preserved — what stops is the verbatim re-transmission. No upstream code changes; measured end-to-end on the official API with task quality preserved.
 
 | | without | with plugin |
 |---|---|---|
-| re-sent old reasoning | 1,645,757 chars | **23,176 chars** |
+| replayed reasoning | 1,645,757 chars | **23,176 chars (−98.6%)** |
 | request body | grew to 286KB | steady ~78KB |
 | task outcome | completed | completed |
 
-The test task was real work — a backtracking regex engine built from scratch, with assertions the model wrote and ran itself.
+The benchmark was a real task — a backtracking regex engine built from scratch, with assertions the model wrote and executed itself.
 
 ## 🚀 Install
 
@@ -28,74 +28,72 @@ The test task was real work — a backtracking regex engine built from scratch, 
 dsh --profile <profile> --patch suite.patch.yml
 ```
 
-`--patch` applies to that run only. For a permanent install, merge `suite.patch.yml` into a profile's `cordis.patch.yml` — patches are per-profile, so install into whichever profiles should have it.
+`--patch` applies to a single run. For a permanent install, merge `suite.patch.yml` into a profile's `cordis.patch.yml` — patches are scoped per profile, so it activates only where you add it.
 
-The default config is the recommended config. Nothing to tune.
-
-Verified on `dsh 0.1.5-rc.2`. Ships as compiled `.js` — any dsh build can load it.
+The default configuration is the recommended one; nothing needs tuning after install. Verified on `dsh 0.1.5-rc.2`. Ships as compiled `.js` — loadable by any dsh build.
 
 ## 🧠 How it works
 
-Old reasoning gets replaced by a summary before it's sent again. The summary keeps conclusions, actions taken, and result previews — what disappears is the verbatim re-transmission.
+Each finished reasoning group is replaced in place by a bounded summary: what was concluded, which tools were called, and previews of their results. The original reasoning stays in the local session log — it simply stops being transmitted.
 
-Features are layered by how much they can hurt a task:
+Every mechanism is classified by how much it can affect task quality:
 
-**🗑️ Deletes redundancy only — on by default**
+**🗑️ Removes redundancy only — on by default**
 
-- `sweep` — whole reasoning groups become summaries
-- `dedupe` — repeated reads of the same file collapse to a one-line pointer
-- `prune` — oversized tool results shrink in place; the original file is still re-readable
+- `sweep` — historical reasoning groups are replaced by summaries
+- `dedupe` — identical repeated tool results collapse to a pointer
+- `prune` — oversized tool results are trimmed; the source file remains re-readable
 
 **💬 Advisory only — on by default**
 
-- `shape` — once per turn: don't re-derive settled conclusions, write plans to a file
-- `loops` — detects circling / over-budget turns and nudges the model to converge; the model can ignore it
-- `batch` — hints at batching when the model reads files one step at a time
-- `effort` — routine steps drop from max to low; a reduction, not a shutdown
+- `shape` — once per turn, reminds the model not to re-derive settled conclusions and to write plans to a file
+- `loops` — detects repeated reasoning signatures, same-tool streaks, no-progress stretches, and over-budget turns; injects a converge reminder the model may ignore
+- `batch` — suggests batching when the model reads files one step at a time
+- `effort` — routine steps run at `low` effort instead of the session level; a reduction, not a shutdown
 
 **✂️ Can truncate — off by default**
 
-- `caps` — hard ceilings on reasoning output. Opt in only if runaway thinking is a real concern
+- `caps` — hard ceilings on reasoning output. Opt in only when runaway thinking is a real concern; self-disables after repeated truncations
 
 ## ⚙️ Configuration
 
-Everything lives in the `config` block of `suite.patch.yml`; each section is independent:
+All controls live in the `config` block of `suite.patch.yml`; each section is independent:
 
 ```yaml
 config:
-  loops: { enabled: false }                # turn off a single feature
+  loops: { enabled: false }                # disable a single feature
   caps: { planningMaxTokens: 32000 }       # hard ceiling (can truncate — opt in deliberately)
-  sweep: { distill: true }                 # summaries become a model-written state note; costs one cheap call per sweep
+  sweep: { distill: true }                 # summaries become a model-written state note; one cheap call per sweep
   sweep: { keepLatest: 1 }                 # never compact the newest reasoning group
 ```
 
 ## 🎯 Where it helps most
 
-The official DeepSeek direct route benefits most — reasoning is billed and replayed there for real. Gateways that forward thinking traces benefit the same way. If a gateway strips thinking before forwarding, gains are smaller: upstream never saw the reasoning, and the plugin mainly relieves local context pressure.
+The official DeepSeek route benefits most — reasoning is genuinely billed and replayed there. Gateways that forward thinking traces see the same effect. Where a gateway strips thinking before forwarding, gains are smaller: upstream never received the reasoning, and the plugin mainly relieves local context pressure.
 
-## ⚠️ Known costs
+## ⚠️ What it costs
 
-- Saves tokens, not time. How long the model thinks is not the plugin's business
-- Summaries are lossy: conclusions stay, reasoning detail goes. When a task needs "why did I rule that out", the model may re-derive it — costs a little, answer stays correct. Enable `distill` if that matters
-- The originals aren't deleted — they stay in the local session log; they just stop being sent
+- Saves tokens, not wall-clock time — the model's thinking depth is not the plugin's to control
+- Summaries are lossy: conclusions survive, reasoning detail does not. If a task needs "why was this approach ruled out", the model may re-derive it — a small extra cost, not a correctness loss. Enable `distill` for higher-fidelity notes
+- Nothing is deleted — originals remain in the local session log; they just stop being sent
 
 ## 🗺️ Roadmap
 
-- **Recall mechanism** — summaries are lossy because one note can't hold everything. Next step is a `recall` tool: originals stay in the local log, the model fetches them back when needed. Pay only when used
+- **Recall mechanism** — summaries are lossy because one note cannot hold everything. Planned: a `recall` tool so the model can fetch original reasoning from the local log on demand — pay only when used
 - **Better distillation** — e.g. explicitly recording approaches tried and abandoned
 
 ## 📁 In this repo
 
 ```
-plugins/token-guardian.js   compiled plugin — single file, zero deps (install this)
+plugins/token-guardian.js   compiled plugin — single file, zero deps
 plugins/token-guardian.ts   TypeScript source
-plugins/metrics-logger.*    optional observability plugin (needs config.out)
+plugins/metrics-logger.*    optional observability plugin (requires config.out)
 suite.patch.yml             install entry point
-思维链token问题定位分析.md   full analysis: root causes, design, measurements, evidence levels
+思维链token问题定位分析.md   full analysis: root causes, design, measurements, per-claim evidence levels
 RESULTS.md                  sanitized experiment data
 ```
 
-Every claim in the analysis doc is tagged verified / inferred / unverified — including the bugs our own tests caught.
+Every claim in the analysis document is tagged verified / inferred / unverified — including the defects our own tests caught.
 
 ## 📄 License
 
