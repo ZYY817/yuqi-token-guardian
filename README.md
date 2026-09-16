@@ -14,11 +14,14 @@ English · [中文](README.zh.md)
 
 In DeepSeek's thinking mode, every agent step re-sends the complete reasoning history and pays for it again. Token Guardian compacts finished reasoning into bounded summaries before it is replayed: conclusions, tool calls, and result previews are preserved — what stops is the verbatim re-transmission. No upstream code changes; measured end-to-end on the official API with task quality preserved.
 
-| | without | with plugin |
-|---|---|---|
-| replayed reasoning | 1,645,757 chars | **23,176 chars (−98.6%)** |
-| request body | grew to 286KB | steady ~78KB |
-| task outcome | completed | completed |
+<table width="100%">
+<thead><tr><th width="34%"></th><th width="33%">without</th><th width="33%">with plugin</th></tr></thead>
+<tbody>
+<tr><td>replayed reasoning</td><td>1,645,757 chars</td><td><b>23,176 chars (−98.6%)</b></td></tr>
+<tr><td>request body</td><td>grew to 286KB</td><td>steady ~78KB</td></tr>
+<tr><td>task outcome</td><td>completed</td><td>completed</td></tr>
+</tbody>
+</table>
 
 The benchmark was a real task — a backtracking regex engine built from scratch, with assertions the model wrote and executed itself.
 
