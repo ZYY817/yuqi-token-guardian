@@ -1,89 +1,102 @@
+<div align="center">
+
 # Token Guardian
 
-[English](README.en.md)
+**On the official DeepSeek API, one task re-sent 1.65M characters of reasoning the model had already produced — every request paying for old thinking again. This plugin cuts that to 23K.**
 
-一个任务跑下来，模型把自己想过的东西重复发送了 165 万个字符。这个插件把它降到 2.3 万。
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![tested on](https://img.shields.io/badge/dsh-0.1.5--rc.2-green.svg)]()
+[![measured](https://img.shields.io/badge/reasoning%20replay-%E2%88%9298.6%25-brightgreen.svg)](RESULTS.md)
 
-DeepSeek 思考模式下，agent 每走一步都要把之前所有思考原文重新发给服务器、重新计一次费。这个插件的做法很直接：用完的旧思考换成一条摘要，结论留下，重复抄送的部分不发。不改官方代码，官方 API 实测重复传输量 -98.6%，任务质量没变差。
+English · [中文](README.zh.md)
 
-| | 裸跑 | 装插件后 |
+</div>
+
+In DeepSeek thinking mode, every agent step re-sends all previous reasoning verbatim — and bills for it again. Token Guardian replaces spent reasoning with a summary: conclusions stay, re-transmission stops. No changes to official code; measured on the official API, task quality unchanged.
+
+| | without | with plugin |
 |---|---|---|
-| 重发的旧思考 | 1,645,757 字符 | 23,176 字符 |
-| 请求体积 | 涨到 286KB | 稳定在 ~78KB |
-| 任务结果 | 完成 | 完成 |
+| re-sent old reasoning | 1,645,757 chars | **23,176 chars** |
+| request body | grew to 286KB | steady ~78KB |
+| task outcome | completed | completed |
 
-测试任务是让模型从零写一个带回溯的正则引擎，不是玩具题。
+The test task was real work — a backtracking regex engine built from scratch, with assertions the model wrote and ran itself.
 
-## 安装
+## 🚀 Install
 
 ```sh
 dsh --profile <profile> --patch suite.patch.yml
 ```
 
-`--patch` 只对本次运行生效。想长期用，把 `suite.patch.yml` 合进某个 profile 的 `cordis.patch.yml` —— patch 跟着 profile 走，装进哪个就在哪个生效；想让所有模式都用，每个 profile 各加一份。
+`--patch` applies to that run only. For a permanent install, merge `suite.patch.yml` into a profile's `cordis.patch.yml` — patches are per-profile, so install into whichever profiles should have it.
 
-默认配置就是推荐配置，装上不用调。
+The default config is the recommended config. Nothing to tune.
 
-在 `dsh 0.1.5-rc.2` 上实测。发布的是编译好的 `.js`，任何版本的 dsh 都能加载。
+Verified on `dsh 0.1.5-rc.2`. Ships as compiled `.js` — any dsh build can load it.
 
-## 原理
+## 🧠 How it works
 
-模型想过的旧内容，换成一条摘要再发。摘要里留着结论、做了什么、结果预览；被删掉的是逐字重复发送的思考原文。
+Old reasoning gets replaced by a summary before it's sent again. The summary keeps conclusions, actions taken, and result previews — what disappears is the verbatim re-transmission.
 
-所有机制按对任务的影响分三层：
+Features are layered by how much they can hurt a task:
 
-**只删重复，默认开**
+**🗑️ Deletes redundancy only — on by default**
 
-- `sweep` — 旧思考整组换成摘要
-- `dedupe` — 同一文件重复读，旧结果折成一行指针
-- `prune` — 超大工具结果剪枝，需要时可回读原文
+- `sweep` — whole reasoning groups become summaries
+- `dedupe` — repeated reads of the same file collapse to a one-line pointer
+- `prune` — oversized tool results shrink in place; the original file is still re-readable
 
-**只建议不强制，默认开**
+**💬 Advisory only — on by default**
 
-- `shape` — 每轮开头提示一次：不重复推导已定结论，计划写进文件
-- `loops` — 检测到打转或超预算时提醒收敛，模型可以不理
-- `batch` — 连续单文件读取时提示合并读
-- `effort` — 机械步骤思考档从 max 降到 low，保留一档浅思考
+- `shape` — once per turn: don't re-derive settled conclusions, write plans to a file
+- `loops` — detects circling / over-budget turns and nudges the model to converge; the model can ignore it
+- `batch` — hints at batching when the model reads files one step at a time
+- `effort` — routine steps drop from max to low; a reduction, not a shutdown
 
-**会截断任务，默认关**
+**✂️ Can truncate — off by default**
 
-- `caps` — 思考量硬上限。怕失控才开
+- `caps` — hard ceilings on reasoning output. Opt in only if runaway thinking is a real concern
 
-## 配置
+## ⚙️ Configuration
 
-都在 `suite.patch.yml` 的 `config` 段，每块独立：
+Everything lives in the `config` block of `suite.patch.yml`; each section is independent:
 
 ```yaml
 config:
-  loops: { enabled: false }                # 关掉单个功能
-  caps: { planningMaxTokens: 32000 }       # 硬上限（会截断，想清楚再开）
-  sweep: { distill: true }                 # 摘要改成模型写的交接笔记，每次清扫多一次便宜调用
-  sweep: { keepLatest: 1 }                 # 最新一段思考永不压缩
+  loops: { enabled: false }                # turn off a single feature
+  caps: { planningMaxTokens: 32000 }       # hard ceiling (can truncate — opt in deliberately)
+  sweep: { distill: true }                 # summaries become a model-written state note; costs one cheap call per sweep
+  sweep: { keepLatest: 1 }                 # never compact the newest reasoning group
 ```
 
-## 什么情况收益大
+## 🎯 Where it helps most
 
-官方 DeepSeek 直连收益最大 —— 思考在那里真计费、真回放。会转发思维链的网关同理。如果网关本身就把思维链剥掉再转发，收益会小一些，主要是省本地上下文压力。
+The official DeepSeek direct route benefits most — reasoning is billed and replayed there for real. Gateways that forward thinking traces benefit the same way. If a gateway strips thinking before forwarding, gains are smaller: upstream never saw the reasoning, and the plugin mainly relieves local context pressure.
 
-## 已知的代价
+## ⚠️ Known costs
 
-- 省 token 不省时间，模型想多久插件管不了
-- 摘要是有损的：留下结论，丢掉推理细节。遇到需要"我为什么排除过那条路"的场景，模型可能要重新推一遍 —— 多花点钱，答案照样对。在意就开 `distill`
-- 被清的原文没有删，还在本地 session 日志里，只是不再发给服务器
+- Saves tokens, not time. How long the model thinks is not the plugin's business
+- Summaries are lossy: conclusions stay, reasoning detail goes. When a task needs "why did I rule that out", the model may re-derive it — costs a little, answer stays correct. Enable `distill` if that matters
+- The originals aren't deleted — they stay in the local session log; they just stop being sent
 
-## 后续计划
+## 🗺️ Roadmap
 
-- **召回机制**：现在摘要有损，是因为一条摘要装不下所有细节。下一步打算给模型一个 `recall` 工具 —— 原文留在本地日志，模型需要时自己取回来，用到才付费
-- **蒸馏摘要继续改进**：比如明确记下试过但放弃的路
+- **Recall mechanism** — summaries are lossy because one note can't hold everything. Next step is a `recall` tool: originals stay in the local log, the model fetches them back when needed. Pay only when used
+- **Better distillation** — e.g. explicitly recording approaches tried and abandoned
 
-## 仓库内容
+## 📁 In this repo
 
 ```
-plugins/token-guardian.js   插件本体（编译产物，单文件零依赖，装这个）
-plugins/token-guardian.ts   TypeScript 源码
-suite.patch.yml             安装入口
-思维链token问题定位分析.md   完整分析：根因、设计、每轮实测，结论逐条标证据等级
-RESULTS.md                  脱敏后的实测数据汇总
+plugins/token-guardian.js   compiled plugin — single file, zero deps (install this)
+plugins/token-guardian.ts   TypeScript source
+plugins/metrics-logger.*    optional observability plugin (needs config.out)
+suite.patch.yml             install entry point
+思维链token问题定位分析.md   full analysis: root causes, design, measurements, evidence levels
+RESULTS.md                  sanitized experiment data
 ```
 
-分析文档里每条结论都标了【已验证 / 推断 / 未验证】，包括我们自己踩的坑。
+Every claim in the analysis doc is tagged verified / inferred / unverified — including the bugs our own tests caught.
+
+## 📄 License
+
+[MIT](LICENSE)
