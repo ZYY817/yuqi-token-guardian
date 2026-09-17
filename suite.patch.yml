@@ -1,5 +1,5 @@
 # Token guardian suite — one plugin, all mechanisms. Install with:
-#   dsh --profile <profile> --patch F:/DSH思考问题/suite.patch.yml
+#   dsh --profile <profile> --patch ./suite.patch.yml
 # Defaults are pure-savings + soft-nudges: nothing below can cut a turn short.
 # Uncomment config keys to tune; set a section's `enabled: false` to turn it off.
 - insert:
